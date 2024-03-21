@@ -7,6 +7,13 @@
 #include <model/cppfilemetrics.h>
 #include <model/cppfilemetrics-odb.hxx>
 
+#include <model/cppvariable.h>
+#include <model/cppvariable-odb.hxx>
+#include <model/cpprecord.h>
+#include <model/cpprecord-odb.hxx>
+#include <model/cppfunction.h>
+#include <model/cppfunction-odb.hxx>
+
 #include <model/cppastnode.h>
 #include <model/cppastnode-odb.hxx>
 
@@ -18,6 +25,7 @@
 #include <util/odbtransaction.h>
 
 #include <memory>
+#include <iostream>
 
 namespace cc
 {
@@ -248,6 +256,16 @@ void CppMetricsParser::lackOfCohesion()
 
 bool CppMetricsParser::parse()
 {
+  util::OdbTransaction {_ctx.db} ([&, this]
+  {
+    std::cout << "Variable count:\t"
+      << _ctx.db->query_value<model::CppVariableCount>().count << std::endl;
+    std::cout << "Record count:\t"
+      << _ctx.db->query_value<model::CppRecordCount>().count << std::endl;
+    std::cout << "Function count:\t"
+      << _ctx.db->query_value<model::CppFunctionCount>().count << std::endl;
+  });
+
   functionParameters();
   functionMcCabe();
   lackOfCohesion();

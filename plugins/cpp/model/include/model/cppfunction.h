@@ -32,6 +32,13 @@ struct CppFunction : CppTypedEntity
 
 typedef std::shared_ptr<CppFunction> CppFunctionPtr;
 
+#pragma db view object(CppFunction)
+struct CppFunctionCount
+{
+  #pragma db column("count(" + CppFunction::id + ")")
+  std::size_t count;
+};
+
 #pragma db view \
   object(CppFunction) object(CppVariable = Parameters : CppFunction::parameters)
 struct CppFunctionParamCount

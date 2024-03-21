@@ -23,6 +23,13 @@ struct CppVariable : CppTypedEntity
 
 typedef std::shared_ptr<CppVariable> CppVariablePtr;
 
+#pragma db view object(CppVariable)
+struct CppVariableCount
+{
+  #pragma db column("count(" + CppVariable::id + ")")
+  std::size_t count;
+};
+
 }
 }
 

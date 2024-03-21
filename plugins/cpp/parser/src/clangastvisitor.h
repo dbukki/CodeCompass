@@ -45,6 +45,8 @@
 #include "entitycache.h"
 #include "symbolhelper.h"
 
+#include <iostream>
+
 namespace cc
 {
 namespace parser
@@ -132,6 +134,66 @@ public:
   bool shouldVisitTemplateInstantiations() const { return true; }
   bool shouldVisitLambdaBody() const { return true; }
   
+
+  void printPosition(std::ostream& out, model::Position pos)
+  {
+    if (pos.line == model::Position::npos)
+      out << '_';
+    else
+      out << pos.line;
+    out << ':';
+    if (pos.column == model::Position::npos)
+      out << '_';
+    else
+      out << pos.column;
+  }
+
+  void printRange(std::ostream& out, model::Range rng)
+  {
+    printPosition(out, rng.start);
+    out << '-';
+    printPosition(out, rng.end);
+  }
+
+  void printEntity(std::ostream& out, const model::CppEntity& entity)
+  {
+    out << entity.qualifiedName;
+    for (const model::CppAstNodePtr& node : _astNodes)
+    {
+      if (node->id == entity.astNodeId)
+      {
+        out << "\t[ " << node->location.file->filename << " / ";
+        printRange(out, node->location.range);
+        out << " ]";
+      }
+    }
+  }
+
+  void printEntity(const char* type, const model::CppEntity& entity)
+  {
+    std::ostringstream out;
+    out << type << '\t';
+    printEntity(out, entity);
+    out << '\n';
+    std::cout << out.str();
+  }
+
+  void printFunction(const model::CppFunctionPtr& ptr)
+  {
+    printEntity("[FUN]", *ptr);
+  }
+
+  void printRecord(const model::CppRecordPtr& ptr)
+  {
+    printEntity("[TYP]", *ptr);
+  }
+
+  void printVariable(const model::CppVariablePtr& ptr)
+  {
+    printEntity("[VAR]", *ptr);
+  }
+
+
   bool TraverseDecl(clang::Decl* decl_)
   {
     // We use implicitness to determine if actual symbol location information
@@ -161,7 +223,10 @@ public:
     bool b = Base::TraverseFunctionDecl(fd_);
 
     if (_functionStack.top()->astNodeId)
+    {
       _functions.push_back(_functionStack.top());
+      printFunction(_functionStack.top());
+    }
     _functionStack.pop();
 
     return b;
@@ -179,6 +244,7 @@ public:
     {
       top->mccabe = _mcCabeStack.top();
       _functions.push_back(top);
+      printFunction(_functionStack.top());
     }
     _mcCabeStack.pop();
     _functionStack.pop();
@@ -196,7 +262,10 @@ public:
     bool b = Base::TraverseCXXDeductionGuideDecl(fd_);
 
     if (_functionStack.top()->astNodeId)
+    {
       _functions.push_back(_functionStack.top());
+      printFunction(_functionStack.top());
+    }
     _functionStack.pop();
 
     return b;
@@ -214,6 +283,7 @@ public:
     {
       top->mccabe = _mcCabeStack.top();
       _functions.push_back(top);
+      printFunction(_functionStack.top());
     }
     _mcCabeStack.pop();
     _functionStack.pop();
@@ -231,7 +301,10 @@ public:
     bool b = Base::TraverseCXXMethodDecl(fd_);
 
     if (_functionStack.top()->astNodeId)
+    {
       _functions.push_back(_functionStack.top());
+      printFunction(_functionStack.top());
+    }
     _functionStack.pop();
 
     return b;
@@ -249,6 +322,7 @@ public:
     {
       top->mccabe = _mcCabeStack.top();
       _functions.push_back(top);
+      printFunction(_functionStack.top());
     }
     _mcCabeStack.pop();
     _functionStack.pop();
@@ -266,7 +340,10 @@ public:
     bool b = Base::TraverseCXXConstructorDecl(fd_);
 
     if (_functionStack.top()->astNodeId)
+    {
       _functions.push_back(_functionStack.top());
+      printFunction(_functionStack.top());
+    }
     _functionStack.pop();
 
     return b;
@@ -284,6 +361,7 @@ public:
     {
       top->mccabe = _mcCabeStack.top();
       _functions.push_back(top);
+      printFunction(_functionStack.top());
     }
     _mcCabeStack.pop();
     _functionStack.pop();
@@ -301,7 +379,10 @@ public:
     bool b = Base::TraverseCXXDestructorDecl(fd_);
 
     if (_functionStack.top()->astNodeId)
+    {
       _functions.push_back(_functionStack.top());
+      printFunction(_functionStack.top());
+    }
     _functionStack.pop();
 
     return b;
@@ -319,6 +400,7 @@ public:
     {
       top->mccabe = _mcCabeStack.top();
       _functions.push_back(top);
+      printFunction(_functionStack.top());
     }
     _mcCabeStack.pop();
     _functionStack.pop();
@@ -336,7 +418,10 @@ public:
     bool b = Base::TraverseCXXConversionDecl(fd_);
 
     if (_functionStack.top()->astNodeId)
+    {
       _functions.push_back(_functionStack.top());
+      printFunction(_functionStack.top());
+    }
     _functionStack.pop();
 
     return b;
@@ -354,6 +439,7 @@ public:
     {
       top->mccabe = _mcCabeStack.top();
       _functions.push_back(top);
+      printFunction(_functionStack.top());
     }
     _mcCabeStack.pop();
     _functionStack.pop();
@@ -368,7 +454,10 @@ public:
     bool b = Base::TraverseRecordDecl(rd_);
 
     if (_typeStack.top()->astNodeId)
+    {
       _types.push_back(_typeStack.top());
+      printRecord(_typeStack.top());
+    }
     _typeStack.pop();
 
     return b;
@@ -388,7 +477,10 @@ public:
     bool b = Base::TraverseCXXRecordDecl(rd_);
 
     if (_typeStack.top()->astNodeId)
+    {
       _types.push_back(_typeStack.top());
+      printRecord(_typeStack.top());
+    }
     _typeStack.pop();
     _isImplicit = wasImplicit;
 
@@ -403,7 +495,10 @@ public:
     bool b = Base::TraverseClassTemplateSpecializationDecl(rd_);
 
     if (_typeStack.top()->astNodeId)
+    {
       _types.push_back(_typeStack.top());
+      printRecord(_typeStack.top());
+    }
     _typeStack.pop();
 
     return b;
@@ -417,7 +512,10 @@ public:
     bool b = Base::TraverseClassTemplatePartialSpecializationDecl(rd_);
 
     if (_typeStack.top()->astNodeId)
+    {
       _types.push_back(_typeStack.top());
+      printRecord(_typeStack.top());
+    }
     _typeStack.pop();
 
     return b;
@@ -922,6 +1020,9 @@ public:
 
     //--- CppFunction ---//
 
+    if (!fn_->isThisDeclarationADefinition())
+      return true;
+
     model::CppFunctionPtr cppFunction = _functionStack.top();
 
     clang::QualType qualType = fn_->getReturnType();
@@ -1063,6 +1164,8 @@ public:
     variable->typeHash = member->memberTypeHash;
     variable->qualifiedType = qualType.getAsString();
 
+    printVariable(variable);
+
     //--- AST type for the type ---//
 
     unsigned rawEncoding = fd_->getTypeSpecStartLoc().getRawEncoding();
@@ -1118,6 +1221,9 @@ public:
 
     //--- CppVariable ---//
 
+    if (!vd_->isThisDeclarationADefinition())
+      return true;
+
     model::CppVariablePtr variable = std::make_shared<model::CppVariable>();
     _variables.push_back(variable);
 
@@ -1129,6 +1235,8 @@ public:
     variable->qualifiedName = vd_->getQualifiedNameAsString();
     variable->typeHash = util::fnvHash(getUSR(qualType, _astContext));
     variable->qualifiedType = qualType.getAsString();
+
+    printVariable(variable);
 
     if (_functionStack.empty())
       variable->tags.insert(model::Tag::Global);
