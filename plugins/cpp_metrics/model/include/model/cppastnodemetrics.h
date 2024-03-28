@@ -20,6 +20,9 @@ struct CppAstNodeMetrics
     BUMPY_ROAD = 3,
     LACK_OF_COHESION = 4,
     LACK_OF_COHESION_HS = 5,
+    BRANCH_COUNT = 6,
+    LOOP_COUNT = 7,
+    FLOW_COUNT = 8,
   };
 
   #pragma db id auto

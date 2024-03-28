@@ -128,17 +128,38 @@ void CppMetricsParser::functionMcCabe()
 {
   util::OdbTransaction {_ctx.db} ([&, this]
   {
+    typedef odb::query<model::CppFunctionMcCabe>::query_columns QFun;
+    const auto& QFunDef = QFun::CppFunction::isDefinition;
+    
     for (const model::CppFunctionMcCabe& function
-      : _ctx.db->query<model::CppFunctionMcCabe>())
+      : _ctx.db->query<model::CppFunctionMcCabe>(QFunDef == true))
     {
       // Skip functions that were included from external libraries.
       if (!cc::util::isRootedUnderAnyOf(_inputPaths, function.filePath))
         continue;
 
+      model::CppAstNodeMetrics funcBC;
+      funcBC.astNodeId = function.astNodeId;
+      funcBC.type = model::CppAstNodeMetrics::Type::BRANCH_COUNT;
+      funcBC.value = function.branchCount;
+      _ctx.db->persist(funcBC);
+
+      model::CppAstNodeMetrics funcLC;
+      funcLC.astNodeId = function.astNodeId;
+      funcLC.type = model::CppAstNodeMetrics::Type::LOOP_COUNT;
+      funcLC.value = function.loopCount;
+      _ctx.db->persist(funcLC);
+
+      model::CppAstNodeMetrics funcFC;
+      funcFC.astNodeId = function.astNodeId;
+      funcFC.type = model::CppAstNodeMetrics::Type::FLOW_COUNT;
+      funcFC.value = function.flowCount;
+      _ctx.db->persist(funcFC);
+
       model::CppAstNodeMetrics funcMcCabe;
       funcMcCabe.astNodeId = function.astNodeId;
       funcMcCabe.type = model::CppAstNodeMetrics::Type::MCCABE;
-      funcMcCabe.value = function.mccabe;
+      funcMcCabe.value = 1 + function.branchCount + function.loopCount + function.flowCount;
       _ctx.db->persist(funcMcCabe);
     }
   });
@@ -148,8 +169,11 @@ void CppMetricsParser::functionBumpyRoad()
 {
   util::OdbTransaction {_ctx.db} ([&, this]
   {
+    typedef odb::query<model::CppFunctionBumpyRoad>::query_columns QFun;
+    const auto& QFunDef = QFun::CppFunction::isDefinition;
+    
     for (const model::CppFunctionBumpyRoad& function
-      : _ctx.db->query<model::CppFunctionBumpyRoad>())
+      : _ctx.db->query<model::CppFunctionBumpyRoad>(QFunDef == true))
     {
       // Skip functions that were included from external libraries.
       if (!cc::util::isRootedUnderAnyOf(_inputPaths, function.filePath))
@@ -414,10 +438,10 @@ public:
 
 bool CppMetricsParser::parse()
 {
-  functionParameters();
+  //functionParameters();
   functionMcCabe();
   functionBumpyRoad();
-  lackOfCohesion();
+  //lackOfCohesion();
 
   extract();
   return true;
@@ -426,20 +450,29 @@ bool CppMetricsParser::parse()
 bool CppMetricsParser::extract()
 {
   std::string sName;
-  std::cout << "\nExtraction name: ";
-  std::getline(std::cin, sName);
+  const auto& varName = _ctx.options["extract-to"];
+  if (varName.empty())
+  {
+    std::cout << "\nExtraction name: ";
+    std::getline(std::cin, sName);
+  }
+  else
+  {
+    sName = varName.as<std::string>();
+  }
   boost::trim(sName);
+
   if (!sName.empty())
   {
     MetricsExtractor me(_ctx, sName.c_str());
     std::cout << "Extracting to: " << me.RootDir().c_str() << std::endl;
 
     typedef model::CppAstNodeMetrics::Type Type;
-    me.Extract(Type::PARAMETER_COUNT, "ParamCount");
+    me.Extract(Type::BRANCH_COUNT, "Branch");
+    me.Extract(Type::LOOP_COUNT, "Loop");
+    me.Extract(Type::FLOW_COUNT, "Flow");
     me.Extract(Type::MCCABE, "McCabe");
     me.Extract(Type::BUMPY_ROAD, "BumpyRoad");
-    me.Extract(Type::LACK_OF_COHESION, "LackOfCoh");
-    me.Extract(Type::LACK_OF_COHESION_HS, "LackOfCohHS");
 
     return true;
   }
@@ -471,6 +504,8 @@ extern "C"
   boost::program_options::options_description getOptions()
   {
     boost::program_options::options_description description("C++ Metrics Plugin");
+    description.add_options()
+      ("extract-to", po::value<std::string>(), "Name of directory to extract metrics data to.");
 
     return description;
   }

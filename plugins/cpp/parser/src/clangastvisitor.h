@@ -308,12 +308,6 @@ public:
 
   // Metrics helpers
 
-  void CountMcCabe()
-  {
-    if (!_functionStack.empty())
-      ++_functionStack.top()->mccabe;
-  }
-
   void CountBumpiness(const StatementScope& scope_)
   {
     if (!_functionStack.empty() && scope_.IsReal())
@@ -373,21 +367,24 @@ public:
 
   bool TraverseBinaryOperator(clang::BinaryOperator* bo_)
   {
-    if (bo_->isLogicalOp()) CountMcCabe();
+    if (bo_->isLogicalOp() && !_functionStack.empty())
+      ++_functionStack.top()->branchCount;
     CtxStmtScope css(this, bo_);
     return Base::TraverseBinaryOperator(bo_);
   }
 
   bool TraverseConditionalOperator(clang::ConditionalOperator* co_)
   {
-    CountMcCabe();
+    if (!_functionStack.empty())
+      ++_functionStack.top()->branchCount;
     return Base::TraverseConditionalOperator(co_);
   }
 
   bool TraverseBinaryConditionalOperator(
     clang::BinaryConditionalOperator* bco_)
   {
-    CountMcCabe();
+    if (!_functionStack.empty())
+      ++_functionStack.top()->branchCount;
     return Base::TraverseBinaryConditionalOperator(bco_);
   }
 
@@ -415,35 +412,40 @@ public:
   bool TraverseIfStmt(clang::IfStmt* is_)
   {
     _stmtStack.Top()->MakeTwoWay(is_->getThen(), is_->getElse());
-    CountMcCabe();
+    if (!_functionStack.empty())
+      ++_functionStack.top()->branchCount;
     return Base::TraverseIfStmt(is_);
   }
 
   bool TraverseWhileStmt(clang::WhileStmt* ws_)
   {
     _stmtStack.Top()->MakeOneWay(ws_->getBody());
-    CountMcCabe();
+    if (!_functionStack.empty())
+      ++_functionStack.top()->loopCount;
     return Base::TraverseWhileStmt(ws_);
   }
 
   bool TraverseDoStmt(clang::DoStmt* ds_)
   {
     _stmtStack.Top()->MakeOneWay(ds_->getBody());
-    CountMcCabe();
+    if (!_functionStack.empty())
+      ++_functionStack.top()->loopCount;
     return Base::TraverseDoStmt(ds_);
   }
 
   bool TraverseForStmt(clang::ForStmt* fs_)
   {
     _stmtStack.Top()->MakeOneWay(fs_->getBody());
-    CountMcCabe();
+    if (!_functionStack.empty())
+      ++_functionStack.top()->loopCount;
     return Base::TraverseForStmt(fs_);
   }
 
   bool TraverseCXXForRangeStmt(clang::CXXForRangeStmt* frs_)
   {
     _stmtStack.Top()->MakeOneWay(frs_->getBody());
-    CountMcCabe();
+    if (!_functionStack.empty())
+      ++_functionStack.top()->loopCount;
     return Base::TraverseCXXForRangeStmt(frs_);
   }
 
@@ -456,26 +458,51 @@ public:
   bool TraverseCaseStmt(clang::CaseStmt* cs_)
   {
     _stmtStack.Top()->MakeTransparent();
-    CountMcCabe();
+    if (!_functionStack.empty())
+      ++_functionStack.top()->branchCount;
     return Base::TraverseCaseStmt(cs_);
   }
 
   bool TraverseDefaultStmt(clang::DefaultStmt* ds_)
   {
     _stmtStack.Top()->MakeTransparent();
-    CountMcCabe();
+    if (!_functionStack.empty())
+      ++_functionStack.top()->branchCount;
     return Base::TraverseDefaultStmt(ds_);
+  }
+
+  StatementScope* GetBreakableParentScope(StatementScope* ss)
+  {
+    while (ss != nullptr && !(
+      llvm::isa<clang::ForStmt>(ss->Statement()) ||
+      llvm::isa<clang::CXXForRangeStmt>(ss->Statement()) ||
+      llvm::isa<clang::WhileStmt>(ss->Statement()) ||
+      llvm::isa<clang::DoStmt>(ss->Statement()) ||
+      llvm::isa<clang::SwitchStmt>(ss->Statement()) ))
+      ss = ss->Previous();
+    return ss;
+  }
+
+  bool TraverseBreakStmt(clang::BreakStmt* bs_)
+  {
+    StatementScope* ss = GetBreakableParentScope(_stmtStack.TopValid());
+    assert(ss != nullptr);
+    if (!_functionStack.empty() && !llvm::isa<clang::SwitchStmt>(ss->Statement()))
+      ++_functionStack.top()->flowCount;
+    return Base::TraverseBreakStmt(bs_);
   }
 
   bool TraverseContinueStmt(clang::ContinueStmt* cs_)
   {
-    CountMcCabe();
+    if (!_functionStack.empty())
+      ++_functionStack.top()->flowCount;
     return Base::TraverseContinueStmt(cs_);
   }
 
   bool TraverseGotoStmt(clang::GotoStmt* gs_)
   {
-    CountMcCabe();
+    if (!_functionStack.empty())
+      ++_functionStack.top()->flowCount;
     return Base::TraverseGotoStmt(gs_);
   }
 
@@ -488,7 +515,8 @@ public:
   bool TraverseCXXCatchStmt(clang::CXXCatchStmt* cs_)
   {
     _stmtStack.Top()->MakeOneWay(cs_->getHandlerBlock());
-    CountMcCabe();
+    if (!_functionStack.empty())
+      ++_functionStack.top()->branchCount;
     return Base::TraverseCXXCatchStmt(cs_);
   }
 
@@ -883,7 +911,10 @@ public:
     cppFunction->qualifiedName = fn_->getQualifiedNameAsString();
     cppFunction->typeHash = util::fnvHash(getUSR(qualType, _astContext));
     cppFunction->qualifiedType = qualType.getAsString();
-    cppFunction->mccabe = fn_->isThisDeclarationADefinition() ? 1 : 0;
+    cppFunction->isDefinition = fn_->isThisDeclarationADefinition();
+    cppFunction->branchCount = 0;
+    cppFunction->loopCount = 0;
+    cppFunction->flowCount = 0;
     cppFunction->bumpiness = 0;
     cppFunction->statementCount = 0;
 

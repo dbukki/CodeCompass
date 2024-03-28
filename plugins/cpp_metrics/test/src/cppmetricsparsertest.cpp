@@ -91,9 +91,9 @@ TEST_P(ParameterizedMcCabeTest, McCabeTest) {
   _transaction([&, this]() {
     typedef odb::query<model::CppFunction> QFun;
     model::CppFunction func = _db->query_value<model::CppFunction>(
-      QFun::qualifiedName == GetParam().first && QFun::mccabe != 0);
+      QFun::qualifiedName == GetParam().first && QFun::isDefinition == true);
 
-    EXPECT_EQ(GetParam().second, func.mccabe);
+    EXPECT_EQ(GetParam().second, 1 + func.branchCount + func.loopCount + func.flowCount);
   });
 }
 

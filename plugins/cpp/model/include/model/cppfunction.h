@@ -19,7 +19,11 @@ struct CppFunction : CppTypedEntity
   #pragma db on_delete(cascade)
   std::vector<odb::lazy_shared_ptr<CppVariable>> locals;
 
-  unsigned int mccabe;
+  bool isDefinition;
+  unsigned int branchCount;
+  unsigned int loopCount;
+  unsigned int flowCount;
+
   unsigned int bumpiness;
   unsigned int statementCount;
 
@@ -78,8 +82,12 @@ struct CppFunctionMcCabe
   #pragma db column(CppEntity::astNodeId)
   CppAstNodeId astNodeId;
 
-  #pragma db column(CppFunction::mccabe)
-  unsigned int mccabe;
+  #pragma db column(CppFunction::branchCount)
+  unsigned int branchCount;
+  #pragma db column(CppFunction::loopCount)
+  unsigned int loopCount;
+  #pragma db column(CppFunction::flowCount)
+  unsigned int flowCount;
 
   #pragma db column(File::path)
   std::string filePath;
