@@ -47,6 +47,8 @@
 #include "symbolhelper.h"
 #include "nestedscope.h"
 
+#include <iostream>
+
 namespace cc
 {
 namespace parser
@@ -868,6 +870,9 @@ public:
 
     //--- CppFunction ---//
 
+    if (!fn_->isThisDeclarationADefinition())
+      return true;
+
     model::CppFunctionPtr cppFunction = _functionStack.top();
 
     clang::QualType qualType = fn_->getReturnType();
@@ -881,6 +886,73 @@ public:
     cppFunction->mccabe = fn_->isThisDeclarationADefinition() ? 1 : 0;
     cppFunction->bumpiness = 0;
     cppFunction->statementCount = 0;
+
+    unsigned int count = fn_->getNumTemplateParameterLists();
+    for (unsigned int t = 0; t < count; ++t)
+    {
+      if (clang::TemplateParameterList* pTPars = fn_->getTemplateParameterList(t))
+      {
+        cppFunction->qualifiedName += '<';
+        for (unsigned int p = 0; p < pTPars->size(); ++p)
+        {
+          const clang::NamedDecl* par = pTPars->getParam(p);
+          if (p > 0)
+            cppFunction->qualifiedName += ',';
+          cppFunction->qualifiedName += par->getQualifiedNameAsString();
+        }
+        cppFunction->qualifiedName += '>';
+      }
+    }
+
+    /*if (const clang::TemplateArgumentList* pTArgs = fn_->getTemplateSpecializationArgs())
+    {
+      cppFunction->qualifiedName += '<';
+      for (unsigned int t = 0; t < pTArgs->size(); ++t)
+      {
+        const clang::TemplateArgument& arg = pTArgs->get(t);
+        if (t > 0)
+          cppFunction->qualifiedName += ',';
+        cppFunction->qualifiedName += arg.getParamTypeForDecl().getAsString();
+      }
+      cppFunction->qualifiedName += '>';
+    }*/
+
+    const auto itPB = fn_->param_begin();
+    const auto itPE = fn_->param_end();
+    cppFunction->qualifiedName += '(';
+    for (auto it = itPB; it != itPE; ++it)
+    {
+      if (it != itPB)
+        cppFunction->qualifiedName += ',';
+      cppFunction->qualifiedName += (*it)->getType().getAsString();
+    }
+    cppFunction->qualifiedName += ')';
+
+    if (clang::CXXMethodDecl* md_ = llvm::dyn_cast<clang::CXXMethodDecl>(fn_))
+    {
+      clang::Qualifiers qs = md_->getMethodQualifiers();
+      if (qs.hasConst())
+        cppFunction->qualifiedName += " const";
+      if (qs.hasVolatile())
+        cppFunction->qualifiedName += " volatile";
+      if (qs.hasRestrict())
+        cppFunction->qualifiedName += " restrict";
+
+      clang::RefQualifierKind rqs = md_->getRefQualifier();
+      switch (rqs)
+      {
+        case clang::RefQualifierKind::RQ_None:
+          break;
+        case clang::RefQualifierKind::RQ_LValue:
+          cppFunction->qualifiedName += "&";
+          break;
+        case clang::RefQualifierKind::RQ_RValue:
+          cppFunction->qualifiedName += "&&";
+          break;
+      }
+    }
+
+    //std::cout << cppFunction->qualifiedName << std::endl;
 
     //--- Tags ---//
 
@@ -1065,6 +1137,9 @@ public:
     _locToAstValue[rawEncoding] = astNode->astValue;
 
     //--- CppVariable ---//
+
+    if (!vd_->isThisDeclarationADefinition())
+      return true;
 
     model::CppVariablePtr variable = std::make_shared<model::CppVariable>();
     _variables.push_back(variable);

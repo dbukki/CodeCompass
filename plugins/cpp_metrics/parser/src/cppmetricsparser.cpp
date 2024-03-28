@@ -11,6 +11,7 @@
 #include <model/cppastnode-odb.hxx>
 
 #include <boost/filesystem.hpp>
+#include <boost/algorithm/string.hpp>
 
 #include <util/filesystem.h>
 #include <util/logutil.h>
@@ -18,6 +19,8 @@
 #include <util/odbtransaction.h>
 
 #include <memory>
+#include <iostream>
+#include <fstream>
 
 namespace cc
 {
@@ -270,12 +273,140 @@ void CppMetricsParser::lackOfCohesion()
   });
 }
 
+class AstNodeLoc
+{
+public:
+  typedef model::Position::PosType Pos;
+
+private:
+  std::string _file;
+  model::Range _range;
+  std::size_t _hash;
+
+public:
+  const std::string& file() const { return _file; }
+  const model::Range& range() const { return _range; }
+
+public:
+  struct Hash
+  { std::size_t operator()(const AstNodeLoc& node) const { return node._hash; } };
+
+public:
+  AstNodeLoc(const std::string& file_, Pos sLn_, Pos sCol_, Pos eLn_, Pos eCol_) :
+    _file(file_),
+    _range(model::Position(sLn_, sCol_), model::Position(eLn_, eCol_)),
+    _hash(0)
+  {
+    std::hash<std::string> hStr;
+    std::hash<Pos> hPos;
+    
+    _hash ^= hStr(_file);
+    _hash ^= hPos(_range.start.line);
+    _hash ^= hPos(_range.start.column);
+    _hash ^= hPos(_range.end.line);
+    _hash ^= hPos(_range.end.column);
+  }
+
+public:
+  bool operator==(const AstNodeLoc& other) const
+  {
+    return _range == other._range && _file == other._file;
+  }
+};
+
 bool CppMetricsParser::parse()
 {
   functionParameters();
   functionMcCabe();
   functionBumpyRoad();
   lackOfCohesion();
+
+  std::string sName;
+  std::cout << "\nExtraction name: ";
+  std::getline(std::cin, sName);
+  boost::trim(sName);
+  if (!sName.empty())
+  {
+    boost::filesystem::path pRootDir = "/home/dani/Artifacts/Extract/";
+    pRootDir /= sName;
+    boost::filesystem::path pCodeDir = pRootDir / "Code/";
+    boost::filesystem::create_directories(pCodeDir);
+    std::cout << "Extracting to: " << pRootDir.c_str() << std::endl;
+
+    util::OdbTransaction {_ctx.db} ([&, this]
+    {
+      typedef model::CppAstNodeMetrics::Type Type;
+      std::unordered_map<Type, std::unique_ptr<std::ofstream>> umReg;
+      umReg.emplace(Type::PARAMETER_COUNT,
+        std::make_unique<std::ofstream>((pRootDir / "ParamCount.ccr").c_str()));
+      umReg.emplace(Type::MCCABE,
+        std::make_unique<std::ofstream>((pRootDir / "McCabe.ccr").c_str()));
+      umReg.emplace(Type::BUMPY_ROAD,
+        std::make_unique<std::ofstream>((pRootDir / "BumpyRoad.ccr").c_str()));
+      umReg.emplace(Type::LACK_OF_COHESION,
+        std::make_unique<std::ofstream>((pRootDir / "LackOfCoh.ccr").c_str()));
+      umReg.emplace(Type::LACK_OF_COHESION_HS,
+        std::make_unique<std::ofstream>((pRootDir / "LackOfCohHS.ccr").c_str()));
+      
+      std::unordered_map<AstNodeLoc, std::size_t, AstNodeLoc::Hash> umCode;
+
+      constexpr auto npos = model::Position::npos;
+      for (const model::CppMetricsLocationView& view
+        : _ctx.db->query<model::CppMetricsLocationView>())
+      {
+        if ((view.startLine != npos && view.startColumn != npos && view.endLine != npos && view.endColumn != npos)
+          && (view.startLine < view.endLine || (view.startLine == view.endLine && view.startColumn < view.endColumn)))
+        {
+          AstNodeLoc loc(view.filePath,
+            view.startLine, view.startColumn,
+            view.endLine, view.endColumn);
+
+          auto resCode = umCode.insert(std::make_pair(loc, umCode.size()));
+          if (resCode.second)
+          {
+            std::ostringstream sDstPath;
+            sDstPath << pCodeDir.c_str() << resCode.first->second << ".ccx";
+
+            std::ifstream isSrc(loc.file());
+            std::ofstream osDst(sDstPath.str());
+
+            AstNodeLoc::Pos ln = 1;
+            AstNodeLoc::Pos col = 1;
+            bool extract = false;
+            int ch;
+            while ((ch = isSrc.get()) >= 0)
+            {
+              if (ln == loc.range().start.line && col == loc.range().start.column)
+                extract = true;
+              if (ln == loc.range().end.line && col == loc.range().end.column)
+                { extract = false; break; }
+
+              if (extract)
+                osDst.put(ch);
+
+              if (ch == '\n')
+                ++ln, col = 1;
+              else ++col;
+            }
+
+            if (extract)
+            {
+              std::cerr << loc.file()
+                << '\t' << loc.range().start.line << ':' << loc.range().start.column
+                << '-'  << loc.range().end.line   << ':' << loc.range().end.column
+                << std::endl;
+              std::cerr << "ln = " << ln << ", col = " << col << std::endl;
+              assert(false);
+            }
+          }
+
+          std::ostream& osReg = *umReg[view.type];
+          osReg << view.qualifiedName << '\t' << view.value << '\t' << resCode.first->second << '\n';
+        }
+      }
+    });
+  }
+  else std::cout << "No extraction took place." << std::endl;
   return true;
 }
 

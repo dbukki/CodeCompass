@@ -45,6 +45,40 @@ struct CppRecordMetricsView
   double value;
 };
 
+#pragma db view \
+  object(CppAstNodeMetrics) \
+  object(CppAstNode : CppAstNodeMetrics::astNodeId == CppAstNode::id) \
+  object(File : CppAstNode::location.file) \
+  object(CppEntity : CppAstNode::id == CppEntity::astNodeId)
+struct CppMetricsLocationView
+{
+  //#pragma db column(CppEntity::name)
+  //std::string name;
+  #pragma db column(CppEntity::qualifiedName)
+  std::string qualifiedName;
+
+  typedef cc::model::CppAstNodeMetrics::Type Type;
+
+  #pragma db column(CppAstNodeMetrics::type)
+  Type type;
+  #pragma db column(CppAstNodeMetrics::value)
+  double value;
+
+  typedef cc::model::Position::PosType PosType;
+
+  #pragma db column(CppAstNode::location.range.start.line)
+  PosType startLine;
+  #pragma db column(CppAstNode::location.range.start.column)
+  PosType startColumn;
+  #pragma db column(CppAstNode::location.range.end.line)
+  PosType endLine;
+  #pragma db column(CppAstNode::location.range.end.column)
+  PosType endColumn;
+
+  #pragma db column(File::path)
+  std::string filePath;
+};
+
 } //model
 } //cc
 
