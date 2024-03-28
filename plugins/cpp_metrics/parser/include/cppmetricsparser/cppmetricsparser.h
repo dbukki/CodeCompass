@@ -41,6 +41,8 @@ private:
   // and member functions for every type.
   void lackOfCohesion();
 
+  bool extract();
+
   std::vector<std::string> _inputPaths;
   std::unordered_set<model::FileId> _fileIdCache;
   std::unordered_map<model::CppAstNodeId, model::FileId> _astNodeIdCache;

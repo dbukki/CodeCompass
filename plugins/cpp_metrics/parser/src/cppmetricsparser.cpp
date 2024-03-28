@@ -314,63 +314,64 @@ public:
   }
 };
 
-bool CppMetricsParser::parse()
+class MetricsExtractor
 {
-  functionParameters();
-  functionMcCabe();
-  functionBumpyRoad();
-  lackOfCohesion();
+private:
+  cc::parser::ParserContext& _ctx;
+  fs::path _root;
+  fs::path _code;
+  std::unordered_map<AstNodeLoc, std::size_t, AstNodeLoc::Hash> _cache;
 
-  std::string sName;
-  std::cout << "\nExtraction name: ";
-  std::getline(std::cin, sName);
-  boost::trim(sName);
-  if (!sName.empty())
+public:
+  const fs::path& RootDir() const { return _root; }
+  const fs::path& CodeDir() const { return _code; }
+
+public:
+  MetricsExtractor(cc::parser::ParserContext& ctx_, const char* name_) :
+    _ctx(ctx_),
+    _root("/home/dani/Artifacts/Extract/"),
+    _code(),
+    _cache()
   {
-    boost::filesystem::path pRootDir = "/home/dani/Artifacts/Extract/";
-    pRootDir /= sName;
-    boost::filesystem::path pCodeDir = pRootDir / "Code/";
-    boost::filesystem::create_directories(pCodeDir);
-    std::cout << "Extracting to: " << pRootDir.c_str() << std::endl;
+    _root /= name_;
+    _code = _root / "Code/";
+    fs::create_directories(_code);
+  }
 
+  void Extract(model::CppAstNodeMetrics::Type type_, const char* name_)
+  {
     util::OdbTransaction {_ctx.db} ([&, this]
     {
-      typedef model::CppAstNodeMetrics::Type Type;
-      std::unordered_map<Type, std::unique_ptr<std::ofstream>> umReg;
-      umReg.emplace(Type::PARAMETER_COUNT,
-        std::make_unique<std::ofstream>((pRootDir / "ParamCount.ccr").c_str()));
-      umReg.emplace(Type::MCCABE,
-        std::make_unique<std::ofstream>((pRootDir / "McCabe.ccr").c_str()));
-      umReg.emplace(Type::BUMPY_ROAD,
-        std::make_unique<std::ofstream>((pRootDir / "BumpyRoad.ccr").c_str()));
-      umReg.emplace(Type::LACK_OF_COHESION,
-        std::make_unique<std::ofstream>((pRootDir / "LackOfCoh.ccr").c_str()));
-      umReg.emplace(Type::LACK_OF_COHESION_HS,
-        std::make_unique<std::ofstream>((pRootDir / "LackOfCohHS.ccr").c_str()));
-      
-      std::unordered_map<AstNodeLoc, std::size_t, AstNodeLoc::Hash> umCode;
+      std::ostringstream ossName;
+      ossName << name_ << ".ccr";
+      std::ofstream ofsReg((_root / ossName.str()).c_str());
 
       constexpr auto npos = model::Position::npos;
+
+      typedef odb::query<model::CppMetricsLocationView>::query_columns QView;
+      const auto& QViewType = QView::CppAstNodeMetrics::type;
+
       for (const model::CppMetricsLocationView& view
-        : _ctx.db->query<model::CppMetricsLocationView>())
+        : _ctx.db->query<model::CppMetricsLocationView>(QViewType == type_))
       {
-        if ((view.startLine != npos && view.startColumn != npos && view.endLine != npos && view.endColumn != npos)
-          && (view.startLine < view.endLine || (view.startLine == view.endLine && view.startColumn < view.endColumn)))
+        if ((view.startLine != npos && view.startColumn != npos
+          && view.endLine != npos && view.endColumn != npos)
+          && (view.startLine < view.endLine
+          || (view.startLine == view.endLine && view.startColumn < view.endColumn)))
         {
           AstNodeLoc loc(view.filePath,
             view.startLine, view.startColumn,
             view.endLine, view.endColumn);
 
-          auto resCode = umCode.insert(std::make_pair(loc, umCode.size()));
+          auto resCode = _cache.insert(std::make_pair(loc, _cache.size()));
           if (resCode.second)
           {
-            std::ostringstream sDstPath;
-            sDstPath << pCodeDir.c_str() << resCode.first->second << ".ccx";
-
+            ossName.str("");
+            ossName << resCode.first->second << ".ccx";
             std::ifstream isSrc(loc.file());
-            std::ofstream osDst(sDstPath.str());
+            std::ofstream osDst((_code / ossName.str()).c_str());
 
-            AstNodeLoc::Pos ln = 1;
+            AstNodeLoc::Pos ln  = 1;
             AstNodeLoc::Pos col = 1;
             bool extract = false;
             int ch;
@@ -391,23 +392,62 @@ bool CppMetricsParser::parse()
 
             if (extract)
             {
-              std::cerr << loc.file()
+              std::cerr << "Error while extracting:\n\t"
+                << loc.file()
                 << '\t' << loc.range().start.line << ':' << loc.range().start.column
                 << '-'  << loc.range().end.line   << ':' << loc.range().end.column
+                << "\n\tln = " << ln << ", col = " << col
                 << std::endl;
-              std::cerr << "ln = " << ln << ", col = " << col << std::endl;
               assert(false);
             }
           }
 
-          std::ostream& osReg = *umReg[view.type];
-          osReg << view.qualifiedName << '\t' << view.value << '\t' << resCode.first->second << '\n';
+          ofsReg << view.qualifiedName << '\t'
+                 << view.value << '\t'
+                 << resCode.first->second << '\n';
         }
       }
     });
   }
-  else std::cout << "No extraction took place." << std::endl;
+
+};
+
+bool CppMetricsParser::parse()
+{
+  functionParameters();
+  functionMcCabe();
+  functionBumpyRoad();
+  lackOfCohesion();
+
+  extract();
   return true;
+}
+
+bool CppMetricsParser::extract()
+{
+  std::string sName;
+  std::cout << "\nExtraction name: ";
+  std::getline(std::cin, sName);
+  boost::trim(sName);
+  if (!sName.empty())
+  {
+    MetricsExtractor me(_ctx, sName.c_str());
+    std::cout << "Extracting to: " << me.RootDir().c_str() << std::endl;
+
+    typedef model::CppAstNodeMetrics::Type Type;
+    me.Extract(Type::PARAMETER_COUNT, "ParamCount");
+    me.Extract(Type::MCCABE, "McCabe");
+    me.Extract(Type::BUMPY_ROAD, "BumpyRoad");
+    me.Extract(Type::LACK_OF_COHESION, "LackOfCoh");
+    me.Extract(Type::LACK_OF_COHESION_HS, "LackOfCohHS");
+
+    return true;
+  }
+  else
+  {
+    std::cout << "No extraction took place." << std::endl;
+    return false;
+  }
 }
 
 CppMetricsParser::~CppMetricsParser()
