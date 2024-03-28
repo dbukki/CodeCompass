@@ -11,7 +11,6 @@
 #include <model/cppastnode-odb.hxx>
 
 #include <boost/filesystem.hpp>
-#include <boost/algorithm/string.hpp>
 
 #include <util/filesystem.h>
 #include <util/logutil.h>
@@ -351,15 +350,15 @@ public:
   const fs::path& CodeDir() const { return _code; }
 
 public:
-  MetricsExtractor(cc::parser::ParserContext& ctx_, const char* name_) :
+  MetricsExtractor(cc::parser::ParserContext& ctx_, const fs::path& path_) :
     _ctx(ctx_),
-    _root("/home/dani/Artifacts/Extract/"),
-    _code(),
+    _root(path_),
+    _code(_root / "Code/"),
     _cache()
   {
-    _root /= name_;
-    _code = _root / "Code/";
     fs::create_directories(_code);
+    _root = fs::canonical(_root);
+    _code = fs::canonical(_code);
   }
 
   void Extract(model::CppAstNodeMetrics::Type type_, const char* name_)
@@ -449,22 +448,21 @@ bool CppMetricsParser::parse()
 
 bool CppMetricsParser::extract()
 {
-  std::string sName;
-  const auto& varName = _ctx.options["extract-to"];
-  if (varName.empty())
+  std::string sExPath;
+  const auto& varExPath = _ctx.options["extract-to"];
+  if (varExPath.empty())
   {
-    std::cout << "\nExtraction name: ";
-    std::getline(std::cin, sName);
+    std::cout << "\nExtraction path: ";
+    std::getline(std::cin, sExPath);
   }
   else
   {
-    sName = varName.as<std::string>();
+    sExPath = varExPath.as<std::string>();
   }
-  boost::trim(sName);
 
-  if (!sName.empty())
+  if (!sExPath.empty())
   {
-    MetricsExtractor me(_ctx, sName.c_str());
+    MetricsExtractor me(_ctx, sExPath);
     std::cout << "Extracting to: " << me.RootDir().c_str() << std::endl;
 
     typedef model::CppAstNodeMetrics::Type Type;
