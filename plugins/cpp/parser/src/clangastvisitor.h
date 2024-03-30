@@ -486,8 +486,8 @@ public:
   bool TraverseBreakStmt(clang::BreakStmt* bs_)
   {
     StatementScope* ss = GetBreakableParentScope(_stmtStack.TopValid());
-    assert(ss != nullptr);
-    if (!_functionStack.empty() && !llvm::isa<clang::SwitchStmt>(ss->Statement()))
+    if (!_functionStack.empty() && (ss == nullptr || ss->Statement() == nullptr
+      || !llvm::isa<clang::SwitchStmt>(ss->Statement())))
       ++_functionStack.top()->flowCount;
     return Base::TraverseBreakStmt(bs_);
   }
