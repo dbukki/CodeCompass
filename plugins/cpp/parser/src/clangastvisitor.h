@@ -473,12 +473,12 @@ public:
 
   StatementScope* GetBreakableParentScope(StatementScope* ss)
   {
-    while (ss != nullptr && !(
+    while (ss != nullptr && (ss->Statement() == nullptr || !(
       llvm::isa<clang::ForStmt>(ss->Statement()) ||
       llvm::isa<clang::CXXForRangeStmt>(ss->Statement()) ||
       llvm::isa<clang::WhileStmt>(ss->Statement()) ||
       llvm::isa<clang::DoStmt>(ss->Statement()) ||
-      llvm::isa<clang::SwitchStmt>(ss->Statement()) ))
+      llvm::isa<clang::SwitchStmt>(ss->Statement()) )))
       ss = ss->Previous();
     return ss;
   }
