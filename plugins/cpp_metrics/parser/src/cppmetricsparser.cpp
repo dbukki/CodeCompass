@@ -103,6 +103,27 @@ bool CppMetricsParser::cleanupDatabase()
   return true;
 }
 
+
+void CppMetricsParser::linesOfCode()
+{
+  util::OdbTransaction {_ctx.db} ([&, this]
+  {
+    for (const model::CppFunctionLOC& loc
+      : _ctx.db->query<model::CppFunctionLOC>())
+    {
+      // Skip functions that were included from external libraries.
+      if (!cc::util::isRootedUnderAnyOf(_inputPaths, loc.filePath))
+        continue;
+
+      model::CppAstNodeMetrics metric;
+      metric.astNodeId = loc.id;
+      metric.type = model::CppAstNodeMetrics::Type::LINES_OF_CODE;
+      metric.value = loc.lines;
+      _ctx.db->persist(metric);
+    }
+  });
+}
+
 void CppMetricsParser::functionParameters()
 {
   util::OdbTransaction {_ctx.db} ([&, this]
@@ -119,6 +140,26 @@ void CppMetricsParser::functionParameters()
       funcParams.type = model::CppAstNodeMetrics::Type::PARAMETER_COUNT;
       funcParams.value = paramCount.count;
       _ctx.db->persist(funcParams);
+    }
+  });
+}
+
+void CppMetricsParser::functionLocals()
+{
+  util::OdbTransaction {_ctx.db} ([&, this]
+  {
+    for (const model::CppFunctionLocalCountWithId& localCount
+      : _ctx.db->query<model::CppFunctionLocalCountWithId>())
+    {
+      // Skip functions that were included from external libraries.
+      if (!cc::util::isRootedUnderAnyOf(_inputPaths, localCount.filePath))
+        continue;
+
+      model::CppAstNodeMetrics funcLocals;
+      funcLocals.astNodeId = localCount.id;
+      funcLocals.type = model::CppAstNodeMetrics::Type::LOCAL_COUNT;
+      funcLocals.value = localCount.count;
+      _ctx.db->persist(funcLocals);
     }
   });
 }
@@ -182,11 +223,23 @@ void CppMetricsParser::functionBumpyRoad()
       const double dC = function.statementCount;
       const bool empty = function.statementCount == 0;
 
-      model::CppAstNodeMetrics metrics;
-      metrics.astNodeId = function.astNodeId;
-      metrics.type = model::CppAstNodeMetrics::Type::BUMPY_ROAD;
-      metrics.value = empty ? 1.0 : (dB / dC);
-      _ctx.db->persist(metrics);
+      model::CppAstNodeMetrics br;
+      br.astNodeId = function.astNodeId;
+      br.type = model::CppAstNodeMetrics::Type::BUMPY_ROAD;
+      br.value = empty ? 1.0 : (dB / dC);
+      _ctx.db->persist(br);
+
+      model::CppAstNodeMetrics sc;
+      sc.astNodeId = function.astNodeId;
+      sc.type = model::CppAstNodeMetrics::Type::STATEMENT_COUNT;
+      sc.value = function.statementCount;
+      _ctx.db->persist(sc);
+
+      model::CppAstNodeMetrics nn;
+      nn.astNodeId = function.astNodeId;
+      nn.type = model::CppAstNodeMetrics::Type::NESTEDNESS;
+      nn.value = function.nestedness;
+      _ctx.db->persist(nn);
     }
   });
 }
@@ -437,7 +490,9 @@ public:
 
 bool CppMetricsParser::parse()
 {
+  linesOfCode();
   //functionParameters();
+  functionLocals();
   functionMcCabe();
   functionBumpyRoad();
   //lackOfCohesion();
@@ -466,11 +521,15 @@ bool CppMetricsParser::extract()
     std::cout << "Extracting to: " << me.RootDir().c_str() << std::endl;
 
     typedef model::CppAstNodeMetrics::Type Type;
-    me.Extract(Type::BRANCH_COUNT, "Branch");
-    me.Extract(Type::LOOP_COUNT, "Loop");
-    me.Extract(Type::FLOW_COUNT, "Flow");
+    me.Extract(Type::BRANCH_COUNT, "BranchCount");
+    me.Extract(Type::LOOP_COUNT, "LoopCount");
+    me.Extract(Type::FLOW_COUNT, "FlowCount");
     me.Extract(Type::MCCABE, "McCabe");
     me.Extract(Type::BUMPY_ROAD, "BumpyRoad");
+    me.Extract(Type::STATEMENT_COUNT, "StatementCount");
+    me.Extract(Type::NESTEDNESS, "Nestedness");
+    me.Extract(Type::LINES_OF_CODE, "LinesOfCode");
+    me.Extract(Type::LOCAL_COUNT, "LocalCount");
 
     return true;
   }

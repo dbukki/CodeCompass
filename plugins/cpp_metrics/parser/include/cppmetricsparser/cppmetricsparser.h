@@ -31,8 +31,12 @@ public:
   virtual bool parse() override;
 
 private:
+  // Calculate lines of code for every function.
+  void linesOfCode();
   // Calculate the count of parameters for every function.
   void functionParameters();
+  // Calculate the count of local variables for every function.
+  void functionLocals();
   // Calculate the McCabe complexity of functions.
   void functionMcCabe();
   // Calculate the bumpy road metric for every function.

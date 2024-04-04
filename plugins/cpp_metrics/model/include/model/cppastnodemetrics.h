@@ -23,6 +23,10 @@ struct CppAstNodeMetrics
     BRANCH_COUNT = 6,
     LOOP_COUNT = 7,
     FLOW_COUNT = 8,
+    STATEMENT_COUNT = 9,
+    NESTEDNESS = 10,
+    LINES_OF_CODE = 11,
+    LOCAL_COUNT = 12,
   };
 
   #pragma db id auto

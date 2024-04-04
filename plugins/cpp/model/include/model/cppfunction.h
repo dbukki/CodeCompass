@@ -26,6 +26,7 @@ struct CppFunction : CppTypedEntity
 
   unsigned int bumpiness;
   unsigned int statementCount;
+  unsigned int nestedness;
 
   std::string toString() const
   {
@@ -38,6 +39,23 @@ struct CppFunction : CppTypedEntity
 };
 
 typedef std::shared_ptr<CppFunction> CppFunctionPtr;
+
+#pragma db view \
+  object(CppFunction) \
+  object(CppAstNode : CppFunction::astNodeId == CppAstNode::id) \
+  object(File : CppAstNode::location.file)
+struct CppFunctionLOC
+{
+  #pragma db column(CppEntity::astNodeId)
+  CppAstNodeId id;
+
+  #pragma db column(CppAstNode::location.range.end.line \
+    + "-" + CppAstNode::location.range.start.line)
+  Position::PosType lines;
+
+  #pragma db column(File::path)
+  std::string filePath;
+};
 
 #pragma db view \
   object(CppFunction) object(CppVariable = Parameters : CppFunction::parameters)
@@ -75,6 +93,24 @@ struct CppFunctionLocalCount
 
 #pragma db view \
   object(CppFunction) \
+  object(CppVariable = Locals : CppFunction::locals) \
+  object(CppAstNode : CppFunction::astNodeId == CppAstNode::id) \
+  object(File : CppAstNode::location.file) \
+  query((?) + "GROUP BY" + cc::model::CppEntity::astNodeId + "," + cc::model::File::path)
+struct CppFunctionLocalCountWithId
+{
+  #pragma db column(CppEntity::astNodeId)
+  CppAstNodeId id;
+
+  #pragma db column("count(" + Locals::id + ")")
+  std::size_t count;
+
+  #pragma db column(File::path)
+  std::string filePath;
+};
+
+#pragma db view \
+  object(CppFunction) \
   object(CppAstNode : CppFunction::astNodeId == CppAstNode::id) \
   object(File : CppAstNode::location.file)
 struct CppFunctionMcCabe
@@ -107,6 +143,9 @@ struct CppFunctionBumpyRoad
 
   #pragma db column(CppFunction::statementCount)
   unsigned int statementCount;
+
+  #pragma db column(CppFunction::nestedness)
+  unsigned int nestedness;
 
   #pragma db column(File::path)
   std::string filePath;

@@ -240,6 +240,10 @@ public:
         prevFun->bumpiness += _curFun->bumpiness +
           _curFun->statementCount * scope->Depth();
         prevFun->statementCount += _curFun->statementCount;
+
+        unsigned int nestedness = scope->Depth() + _curFun->nestedness;
+        if (nestedness > prevFun->nestedness)
+          prevFun->nestedness = nestedness;
       }
     }
   };
@@ -315,6 +319,9 @@ public:
       model::CppFunctionPtr& fun = _functionStack.top();
       fun->bumpiness += scope_.Depth();
       ++fun->statementCount;
+
+      if (scope_.Depth() > fun->nestedness)
+        fun->nestedness = scope_.Depth();
     }
   }
 
@@ -917,6 +924,7 @@ public:
     cppFunction->flowCount = 0;
     cppFunction->bumpiness = 0;
     cppFunction->statementCount = 0;
+    cppFunction->nestedness = 0;
 
     unsigned int count = fn_->getNumTemplateParameterLists();
     for (unsigned int t = 0; t < count; ++t)
