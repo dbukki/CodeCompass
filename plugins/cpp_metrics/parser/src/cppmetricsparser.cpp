@@ -447,34 +447,26 @@ public:
             std::ifstream isSrc(loc.file());
             std::ofstream osDst((_code / ossName.str()).c_str());
 
-            AstNodeLoc::Pos ln  = 1;
-            AstNodeLoc::Pos col = 1;
-            bool extract = false;
+            model::Position pos(1, 1);
             int ch;
-            while ((ch = isSrc.get()) >= 0)
+            while (pos < loc.range().end && (ch = isSrc.get()) >= 0)
             {
-              if (ln == loc.range().start.line && col == loc.range().start.column)
-                extract = true;
-              if (ln == loc.range().end.line && col == loc.range().end.column)
-                { extract = false; break; }
-
-              if (extract)
+              if (pos >= loc.range().start)
                 osDst.put(ch);
 
               if (ch == '\n')
-                ++ln, col = 1;
-              else ++col;
+                ++pos.line, pos.column = 1;
+              else ++pos.column;
             }
 
-            if (extract)
+            if (pos < loc.range().end)
             {
-              std::cerr << "Error while extracting:\n\t"
+              std::cerr << "[Extractor] Range overflow while extracting:\n\t"
                 << loc.file()
                 << '\t' << loc.range().start.line << ':' << loc.range().start.column
                 << '-'  << loc.range().end.line   << ':' << loc.range().end.column
-                << "\n\tln = " << ln << ", col = " << col
+                << "\n\tln = " << pos.line << ", col = " << pos.column
                 << std::endl;
-              assert(false);
             }
           }
 
